@@ -1,0 +1,12 @@
+# AI-Author: Codex (OpenAI model not exposed by runtime)
+.build/
+.swiftpm/
+dist/
+.runtime/
+.DS_Store
+*.log
+*.p12
+*.p8
+.env
+.env.*
+wzh-*

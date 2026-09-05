@@ -1,0 +1,198 @@
+<!doctype html>
+<!-- AI-Author: Codex (OpenAI model not exposed by runtime) -->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f8fafb">
+  <title>LinguaBar — 听见世界，用中文跟上每一句</title>
+  <meta name="description" content="LinguaBar 是 macOS 原生实时双语字幕工具。读取 Google Meet、Chrome、Teams 的音频，将英文或韩文转写并翻译为中文。免费开源，无需第三方 AI API Key。">
+  <meta property="og:title" content="LinguaBar — Live captions. A little more understanding.">
+  <meta property="og:description" content="Native macOS live captions and Chinese translation for Google Meet, Chrome and Teams. Open source, Developer ID signed and Apple notarized.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://wangzheng422.github.io/linguabar/">
+  <meta property="og:image" content="https://wangzheng422.github.io/linguabar/images/linguabar-window.png">
+  <link rel="canonical" href="https://wangzheng422.github.io/linguabar/">
+  <link rel="icon" type="image/png" href="images/app-icon.png">
+  <style>
+    :root { color-scheme:light; --paper:#f8fafb; --ink:#152e38; --muted:#536973; --line:#dbe5e9; --blue:#07647e; --cyan:#e6f5f8; --white:#fff; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; scroll-padding-top:40px; }
+    body { margin:0; background:var(--paper); color:var(--ink); font-family:-apple-system,"SF Pro Text","PingFang SC","Noto Sans SC",sans-serif; -webkit-font-smoothing:antialiased; }
+    a { color:inherit; text-decoration:none; }
+    button { font:inherit; }
+    button,a { touch-action:manipulation; }
+    :focus-visible { outline:3px solid #188fb7; outline-offset:5px; }
+    ::selection { background:#c9ecf3; }
+    html[lang="zh-CN"] [lang="en"],html[lang="en"] [lang="zh-CN"] { display:none; }
+    .shell { width:min(1160px,calc(100% - 64px)); margin:auto; }
+    .skip { position:fixed; top:-80px; left:20px; z-index:10; padding:14px; background:var(--white); }
+    .skip:focus { top:12px; }
+    header { border-bottom:1px solid var(--line); }
+    .nav { min-height:86px; display:flex; align-items:center; justify-content:space-between; gap:24px; }
+    .brand { display:flex; align-items:center; gap:10px; font-size:21px; font-weight:740; letter-spacing:-.6px; }
+    .brand img { width:40px; height:40px; }
+    nav { display:flex; align-items:center; gap:30px; color:var(--muted); font-size:14px; }
+    nav a { display:flex; align-items:center; min-height:44px; }
+    nav a:hover,footer a:hover { color:var(--blue); }
+    .language { display:flex; align-items:center; border:1px solid var(--line); padding:3px; border-radius:8px; gap:2px; }
+    .language button { border:0; background:transparent; color:var(--muted); min-height:38px; padding:0 12px; border-radius:5px; cursor:pointer; font-size:13px; }
+    .language button[aria-pressed="true"] { background:var(--white); color:var(--ink); box-shadow:0 1px 4px #122c3814; font-weight:700; }
+    .hero { display:grid; grid-template-columns:1.05fr 1fr; gap:64px; align-items:center; padding:102px 0 90px; }
+    .eyebrow { display:flex; align-items:center; gap:10px; font-size:12px; font-weight:650; letter-spacing:1px; color:var(--blue); }
+    .dot { width:7px; height:7px; border-radius:50%; background:#14899a; flex-shrink:0; }
+    h1 { margin:25px 0; font-size:clamp(48px,5.3vw,70px); line-height:1.18; letter-spacing:-3px; font-weight:730; text-wrap:balance; }
+    h1 em { color:var(--blue); font-style:normal; }
+    html[lang="en"] h1 { font-size:clamp(45px,5vw,65px); letter-spacing:-2.8px; }
+    .intro { margin:0; max-width:490px; font-size:17px; line-height:1.85; color:var(--muted); text-wrap:pretty; }
+    .actions { display:flex; flex-wrap:wrap; align-items:center; gap:22px; margin-top:32px; }
+    .download { display:inline-flex; align-items:center; justify-content:center; gap:13px; min-height:52px; padding:14px 23px; background:var(--ink); color:var(--white); border-radius:8px; font-size:15px; font-weight:650; transition:background .18s,transform .18s; }
+    .download:hover { background:var(--blue); transform:translateY(-2px); }
+    .text-link { display:inline-flex; align-items:center; gap:8px; min-height:44px; font-size:14px; border-bottom:1px solid var(--line); }
+    .text-link:hover { border-color:var(--blue); }
+    .requirements { margin:16px 0 0; font-size:12px; line-height:1.7; color:var(--muted); }
+    .preview { padding:29px; background:#edf3f5; border-radius:20px; }
+    .caption-card { background:var(--white); border:1px solid #dce6e9; border-radius:13px; box-shadow:0 20px 40px -26px #24445160; overflow:hidden; }
+    .caption-head { display:flex; justify-content:space-between; align-items:center; gap:14px; padding:17px 21px; border-bottom:1px solid var(--line); font-size:12px; }
+    .caption-brand { display:flex; align-items:center; gap:7px; font-weight:700; }
+    .caption-brand img { width:23px; height:23px; }
+    .source-tag { color:var(--muted); font-size:10px; padding:5px 8px; border:1px solid var(--line); border-radius:5px; }
+    .caption-pane { padding:24px 24px 27px; }
+    .pane-label { font-size:9px; color:var(--muted); letter-spacing:1.3px; font-weight:750; }
+    .sample-english { display:block !important; margin:15px 0 0; font-size:23px; line-height:1.55; letter-spacing:-.5px; }
+    .sample-chinese { display:block !important; margin:15px 0 0; font-size:23px; line-height:1.65; color:var(--blue); }
+    .caption-rule { position:relative; height:1px; background:var(--line); }
+    .caption-rule::after { content:""; width:40px; height:4px; background:#bcced5; position:absolute; left:calc(50% - 20px); top:-2px; border-radius:3px; }
+    .caption-footer { padding:13px 23px; display:flex; align-items:center; gap:7px; background:#fafcfc; border-top:1px solid #edf1f3; color:var(--muted); font-size:10px; }
+    .caption-footer .dot { width:5px; height:5px; }
+    .preview-note { margin:16px 0 0; text-align:center; color:var(--muted); font-size:11px; line-height:1.7; }
+    .compatibility { border-block:1px solid var(--line); padding:24px 0; display:flex; align-items:center; justify-content:space-between; gap:24px; flex-wrap:wrap; }
+    .compatibility p { margin:0; color:var(--muted); font-size:12px; }
+    .app-list { display:flex; flex-wrap:wrap; gap:35px; align-items:center; font-size:16px; font-weight:600; letter-spacing:-.4px; }
+    .app-list .system-audio { color:var(--muted); font-weight:450; font-size:14px; }
+    .section { padding:88px 0; }
+    .section-heading { display:grid; grid-template-columns:1fr 1fr; gap:64px; align-items:end; margin-bottom:42px; }
+    .section-kicker { font-size:11px; letter-spacing:1.4px; font-weight:700; color:var(--blue); margin:0 0 16px; }
+    h2 { font-size:36px; line-height:1.35; font-weight:670; letter-spacing:-1.3px; margin:0; text-wrap:balance; }
+    .section-heading p:not(.section-kicker) { margin:0; color:var(--muted); font-size:15px; line-height:1.8; }
+    .feature-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:42px; }
+    .feature { border-top:1px solid var(--line); padding-top:23px; }
+    .feature-number { font-size:11px; color:var(--blue); font-variant-numeric:tabular-nums; }
+    h3 { font-size:20px; margin:17px 0 12px; font-weight:630; letter-spacing:-.4px; }
+    .feature p { font-size:14px; color:var(--muted); line-height:1.85; margin:0; }
+    .product { background:#eef3f5; border-block:1px solid #e2e9ed; }
+    .product-head { display:flex; justify-content:space-between; align-items:end; gap:32px; }
+    .product-head p { color:var(--muted); font-size:14px; margin:0; }
+    figure { margin:34px 0 0; }
+    .screenshot { display:block; width:100%; height:auto; border:1px solid #d5dee2; border-radius:12px; }
+    figcaption { text-align:center; color:var(--muted); font-size:12px; line-height:1.7; margin:16px auto 0; max-width:700px; }
+    .start-grid { display:grid; grid-template-columns:1fr 1fr; gap:100px; }
+    .steps { margin:0; padding:0; list-style:none; counter-reset:step; }
+    .steps li { counter-increment:step; display:grid; grid-template-columns:28px 1fr; gap:14px; padding:20px 0; border-bottom:1px solid var(--line); }
+    .steps li:first-child { padding-top:0; }
+    .steps li::before { content:counter(step,decimal-leading-zero); font-size:12px; color:var(--blue); margin-top:4px; }
+    .steps h3 { margin:0 0 5px; font-size:17px; }
+    .steps p { margin:0; font-size:14px; line-height:1.85; color:var(--muted); }
+    .trust { margin-top:25px; display:flex; flex-direction:column; gap:10px; font-size:12px; color:var(--muted); }
+    .trust-item::before { content:"✓"; color:var(--blue); margin-right:9px; }
+    .faq { border-top:1px solid var(--line); }
+    .faq-grid { display:grid; grid-template-columns:.7fr 1.3fr; gap:80px; }
+    details { border-bottom:1px solid var(--line); padding:20px 0; }
+    details:first-child { padding-top:0; }
+    summary { display:flex; justify-content:space-between; gap:20px; cursor:pointer; list-style:none; font-size:16px; line-height:1.6; }
+    summary::-webkit-details-marker { display:none; }
+    summary::after { content:"+"; color:var(--blue); font-size:22px; line-height:1.15; }
+    details[open] summary::after { content:"−"; }
+    details p { font-size:14px; line-height:1.85; color:var(--muted); margin:13px 28px 0 0; }
+    .closing { text-align:center; padding:65px 0; background:var(--cyan); border-block:1px solid #d6e9ee; }
+    .closing h2 { margin-bottom:23px; }
+    .closing p { margin:15px 0 0; font-size:12px; color:var(--muted); }
+    footer { padding:28px 0; }
+    .footer-row { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:22px; color:var(--muted); font-size:12px; }
+    .footer-links { display:flex; flex-wrap:wrap; gap:24px; }
+    @media (max-width:960px) { .hero { gap:35px; padding:72px 0; } .preview { padding:18px; } h1 { font-size:53px; } .sample-english,.sample-chinese { font-size:21px; } .start-grid { gap:55px; } .app-list { gap:22px; } }
+    @media (max-width:720px) {
+      .shell { width:calc(100% - 40px); } .nav { min-height:74px; gap:10px; } nav { gap:12px; } nav .desktop-link { display:none; } .brand { font-size:19px; } .brand img { width:34px; height:34px; }
+      .language button { min-height:40px; padding:0 10px; } .hero { grid-template-columns:1fr; padding:56px 0 44px; gap:40px; } h1,html[lang="en"] h1 { font-size:clamp(43px,10vw,62px); letter-spacing:-2px; }
+      .intro { font-size:16px; } .preview { max-width:500px; width:100%; justify-self:center; padding:22px; } .sample-english,.sample-chinese { font-size:23px; } .compatibility { align-items:start; gap:15px; } .app-list { font-size:15px; gap:14px 25px; }
+      .section { padding:58px 0; } .section-heading,.start-grid,.faq-grid { grid-template-columns:1fr; gap:25px; } h2 { font-size:30px; } .feature-grid { grid-template-columns:1fr; gap:28px; } .feature { display:grid; grid-template-columns:28px 1fr; gap:0 13px; } .feature-number { margin-top:5px; grid-row:1/3; } h3 { margin:0 0 10px; } .feature p { grid-column:2; } .product-head { align-items:start; flex-direction:column; gap:15px; }
+      figure { margin-top:25px; } .start-grid { gap:36px; } .closing { padding:50px 0; } .screenshot { border-radius:5px; }
+    }
+    @media (prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } *,*::before,*::after { transition:none !important; animation:none !important; } }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main"><span lang="zh-CN">跳到内容</span><span lang="en">Skip to content</span></a>
+  <header><div class="shell nav">
+    <a class="brand" href="#" aria-label="LinguaBar"><img src="images/app-icon.png" width="40" height="40" alt="">LinguaBar</a>
+    <nav aria-label="Main navigation"><a class="desktop-link" href="#features"><span lang="zh-CN">功能</span><span lang="en">Features</span></a><a class="desktop-link" href="#start"><span lang="zh-CN">开始使用</span><span lang="en">Get started</span></a><a class="desktop-link" href="https://github.com/wangzheng422/linguabar">GitHub ↗</a><div class="language" role="group" aria-label="页面语言 / Page language"><button type="button" data-language="zh-CN" aria-pressed="true" aria-label="简体中文">中文</button><button type="button" data-language="en" aria-pressed="false" aria-label="English">EN</button></div></nav>
+  </div></header>
+  <main id="main">
+    <div class="shell">
+      <section class="hero" aria-labelledby="hero-title">
+        <div>
+          <div class="eyebrow"><span class="dot" aria-hidden="true"></span><span lang="zh-CN">专为 macOS 打造 · 免费开源</span><span lang="en">Made for macOS · Free &amp; open source</span></div>
+          <h1 id="hero-title"><span lang="zh-CN">会议继续。<br><em>理解，跟上。</em></span><span lang="en">Stay in the<br><em>conversation.</em></span></h1>
+          <p class="intro" lang="zh-CN">听原声，看中文。LinguaBar 将 Mac 上的会议音频转成实时双语字幕，让你少一点语言障碍，多一点专注。</p>
+          <p class="intro" lang="en">Listen to the original. Read it in Chinese. LinguaBar turns meeting audio on your Mac into live bilingual captions, so you can focus on the conversation.</p>
+          <div class="actions"><a class="download" href="https://github.com/wangzheng422/linguabar/releases/download/v0.1.0/LinguaBar-0.1.0-macos-arm64.dmg"><span aria-hidden="true">↓</span><span lang="zh-CN">下载 Mac 版</span><span lang="en">Download for Mac</span></a><a class="text-link" href="https://github.com/wangzheng422/linguabar"><span lang="zh-CN">查看源代码</span><span lang="en">View source</span><span aria-hidden="true">↗</span></a></div>
+          <p class="requirements">v0.1.0 · macOS 15+ · Apple Silicon (M1+)</p>
+        </div>
+        <div class="preview">
+          <div class="caption-card" aria-label="Bilingual caption example">
+            <div class="caption-head"><span class="caption-brand"><img src="images/app-icon.png" width="23" height="23" alt="">LinguaBar</span><span class="source-tag">Google Meet</span></div>
+            <div class="caption-pane"><span class="pane-label">ENGLISH · LIVE</span><p class="sample-english" lang="en">Let's make sure everyone<br>is on the same page.</p></div>
+            <div class="caption-rule" aria-hidden="true"></div>
+            <div class="caption-pane"><span class="pane-label"><span lang="zh-CN">简体中文 · 翻译</span><span lang="en">CHINESE · TRANSLATION</span></span><p class="sample-chinese" lang="zh-CN">让我们确保每个人<br>都达成共识。</p></div>
+            <div class="caption-footer"><span class="dot" aria-hidden="true"></span><span lang="zh-CN">原文与译文，在一起。</span><span lang="en">Two languages. One conversation.</span></div>
+          </div>
+          <p class="preview-note"><span lang="zh-CN">字幕排版示意 · 示例文本，非真实会议或运行截图</span><span lang="en">Caption illustration · Sample text, not a live app screenshot</span></p>
+        </div>
+      </section>
+      <div class="compatibility"><p><span lang="zh-CN">听你已经在用的会议工具</span><span lang="en">For the tools you already use</span></p><div class="app-list"><span>Google Meet</span><span>Chrome</span><span>Microsoft Teams</span><span class="system-audio"><span lang="zh-CN">以及系统音频</span><span lang="en">&amp; system audio</span></span></div></div>
+      <section class="section" id="features">
+        <div class="section-heading"><div><p class="section-kicker">A LITTLE MORE UNDERSTANDING</p><h2><span lang="zh-CN">字幕，就该顺着你的习惯。</span><span lang="en">Captions that fit<br>the way you work.</span></h2></div><p lang="zh-CN">不是另一个会议平台，而是留在你身边的一扇小窗口。无需虚拟声卡，也无需第三方 AI API Key。</p><p lang="en">Not another meeting platform. Just a native window beside the one you use. No virtual audio driver or third-party AI API key required.</p></div>
+        <div class="feature-grid">
+          <article class="feature"><span class="feature-number">01 /</span><h3><span lang="zh-CN">原文与中文，一起看</span><span lang="en">Both sides of every sentence</span></h3><p lang="zh-CN">英文、韩文实时转写并翻译成中文。选择中文输入时，只保留转写，让阅读更直接。</p><p lang="en">Transcribe English or Korean and read the Chinese translation below. Choose Chinese input for a clean, transcript-only view.</p></article>
+          <article class="feature"><span class="feature-number">02 /</span><h3><span lang="zh-CN">调到刚刚好</span><span lang="en">Make room for your focus</span></h3><p lang="zh-CN">拖动双语分隔条，调整字号和背景透明度。需要时置顶，下次启动记住你的语言与音频源。</p><p lang="en">Resize the split, adjust type size and background opacity, or pin the window. Your language and audio preferences return next time.</p></article>
+          <article class="feature"><span class="feature-number">03 /</span><h3><span lang="zh-CN">长会议，也保持清爽</span><span lang="en">A little history, not a mountain</span></h3><p lang="zh-CN">默认保留最近 100 个语义行，上限可调。向上滚动回看，回到底部，字幕就会继续自动跟随。</p><p lang="en">Keep the latest 100 semantic lines by default, with an adjustable limit. Scroll back to review; return to the bottom to follow live again.</p></article>
+        </div>
+      </section>
+    </div>
+    <section class="product section" id="app"><div class="shell"><div class="product-head"><h2><span lang="zh-CN">原生窗口，留给内容。</span><span lang="en">A native window.<br>Room for the words.</span></h2><p>SwiftUI · Core Audio · Apple Speech · Translation</p></div><figure><img class="screenshot" src="images/linguabar-window.png" width="2184" height="1458" loading="lazy" alt="LinguaBar 原生双语字幕窗口，等待会议音频。Native bilingual caption window waiting for meeting audio."><figcaption><span lang="zh-CN">真实应用截图，展示等待音频状态，不含私人会议内容。当前 App 界面使用中文。</span><span lang="en">Actual app screenshot in its waiting state, with no private meeting content. The app currently uses Chinese UI labels.</span></figcaption></figure></div></section>
+    <section class="section shell" id="start"><div class="start-grid">
+      <div><p class="section-kicker">READY WHEN YOU ARE</p><h2><span lang="zh-CN">下一场会议，<br>从这里开始。</span><span lang="en">Ready for your<br>next meeting.</span></h2><div class="trust"><span class="trust-item"><span lang="zh-CN">Developer ID 正式签名</span><span lang="en">Developer ID signed</span></span><span class="trust-item"><span lang="zh-CN">通过 Apple 公证，已附加票据</span><span lang="en">Apple notarized, with stapled tickets</span></span><span class="trust-item"><span lang="zh-CN">AGPL v3 开源，源码随版本提供</span><span lang="en">AGPL v3, with corresponding source</span></span></div></div>
+      <ol class="steps">
+        <li><div><h3><span lang="zh-CN">下载，拖入 Applications</span><span lang="en">Download. Drag to Applications.</span></h3><p lang="zh-CN">打开 DMG，把 LinguaBar 拖进应用程序。当前版本适用于 macOS 15+ 的 Apple Silicon Mac。</p><p lang="en">Open the DMG and drag LinguaBar into Applications. This release supports Apple Silicon Macs running macOS 15 or later.</p></div></li>
+        <li><div><h3><span lang="zh-CN">选择会议来源与语言</span><span lang="en">Choose your source and language.</span></h3><p lang="zh-CN">打开 Meet、Chrome 或 Teams，选择音频源与 English、한국어 或中文。默认优先 Google Meet。</p><p lang="en">Open Meet, Chrome or Teams. Choose the audio source and English, Korean or Chinese. Google Meet is preferred by default.</p></div></li>
+        <li><div><h3><span lang="zh-CN">允许权限，开始字幕</span><span lang="en">Allow permissions. Start captions.</span></h3><p lang="zh-CN">允许 macOS 的语音识别与系统音频录制权限。首次翻译可能需要下载语言包。</p><p lang="en">Allow macOS Speech Recognition and system audio recording. Translation may need a language download on first use.</p></div></li>
+      </ol>
+    </div></section>
+    <section class="section faq shell" id="questions"><div class="faq-grid"><div><p class="section-kicker">GOOD TO KNOW</p><h2><span lang="zh-CN">先说清楚。</span><span lang="en">A few honest answers.</span></h2></div><div>
+      <details><summary><span lang="zh-CN">它完全离线吗？</span><span lang="en">Does it work entirely offline?</span></summary><p lang="zh-CN">不保证。转写使用 Apple Speech，可能根据语言与系统支持使用苹果服务器；当前没有强制离线识别。翻译使用 Apple Translation 的设备端语言模型，首次可能下载资源。App 不保存录音或转写文件。</p><p lang="en">Not necessarily. Transcription uses Apple Speech, which may use Apple's servers depending on language and system support. Offline recognition is not forced. Translation uses on-device Apple language models, with initial downloads when needed. The app does not save recordings or transcript files.</p></details>
+      <details><summary><span lang="zh-CN">只捕获 Google Meet 标签页吗？</span><span lang="en">Is capture isolated to a Google Meet tab?</span></summary><p lang="zh-CN">不是。Chrome 中的 Meet 使用 Chrome 进程树音频，其他标签页的声音也可能被捕获。请按需暂停其他网页音频；切换来源或语言前先停止字幕。</p><p lang="en">No. Meet in Chrome uses the Chrome process tree, so audio from other tabs may also be captured. Pause other browser audio when needed. Stop captions before switching sources or languages.</p></details>
+      <details><summary><span lang="zh-CN">支持哪些 Mac 和语言？</span><span lang="en">Which Macs and languages are supported?</span></summary><p lang="zh-CN">当前发行包为 Apple Silicon（M1 及以后），需要 macOS 15+；尚未包含或验证 Intel 版本。识别支持英文、韩文、中文；翻译目标为简体中文。当前 App 界面为中文，项目文档为中英文。</p><p lang="en">The binary targets Apple Silicon (M1 and later) with macOS 15+. Intel is not included or validated. Recognition supports English, Korean and Chinese; translation targets Simplified Chinese. The app UI is Chinese, with bilingual documentation.</p></details>
+      <details><summary><span lang="zh-CN">遇到问题，或者想参与开发？</span><span lang="en">Found a problem or want to contribute?</span></summary><p lang="zh-CN">这是一个早期预览版，识别质量与标点受音频和系统能力影响。欢迎在 GitHub 提交 Issue 或贡献代码。请勿在公开 Issue 中上传私人会议录音、字幕或密钥。</p><p lang="en">This is an early preview. Audio quality and system capabilities affect recognition and punctuation. Issues and code contributions are welcome on GitHub. Please keep private meeting audio, transcripts and credentials out of public issues.</p><p><a class="text-link" href="https://github.com/wangzheng422/linguabar/issues">GitHub Issues ↗</a></p></details>
+    </div></div></section>
+    <section class="closing"><div class="shell"><h2><span lang="zh-CN">多一点理解，少一点分心。</span><span lang="en">More understanding.<br>Less getting lost.</span></h2><a class="download" href="https://github.com/wangzheng422/linguabar/releases/download/v0.1.0/LinguaBar-0.1.0-macos-arm64.dmg"><span aria-hidden="true">↓</span><span lang="zh-CN">下载 Mac 版</span><span lang="en">Download for Mac</span></a><p>macOS 15+ · Apple Silicon · v0.1.0</p></div></section>
+  </main>
+  <footer class="shell"><div class="footer-row"><span>LinguaBar / <span lang="zh-CN">为更好的理解而做。</span><span lang="en">Made for a little more understanding.</span></span><div class="footer-links"><a href="https://github.com/wangzheng422/linguabar">GitHub</a><a href="https://github.com/wangzheng422/linguabar/releases"><span lang="zh-CN">全部版本</span><span lang="en">Releases</span></a><a href="https://github.com/wangzheng422/linguabar/blob/main/LICENSE">AGPL v3</a><a href="https://github.com/wangzheng422/linguabar/blob/main/THIRD_PARTY_NOTICES.md"><span lang="zh-CN">致谢与来源</span><span lang="en">Acknowledgments</span></a></div></div></footer>
+  <script>
+    // AI-Author: Codex (OpenAI model not exposed by runtime)
+    (() => {
+      const buttons = document.querySelectorAll("[data-language]");
+      function setLanguage(language) {
+        const selected = language === "en" ? "en" : "zh-CN";
+        document.documentElement.lang = selected;
+        document.title = selected === "en" ? "LinguaBar — Native macOS live captions & Chinese translation" : "LinguaBar — 听见世界，用中文跟上每一句";
+        buttons.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.language === selected)));
+        try { localStorage.setItem("linguabar-site-language", selected); } catch (_) { /* The site works with storage disabled. */ }
+      }
+      let initial = "zh-CN";
+      try { initial = localStorage.getItem("linguabar-site-language") || initial; } catch (_) { /* Keep Chinese as the default. */ }
+      buttons.forEach(button => button.addEventListener("click", () => setLanguage(button.dataset.language)));
+      setLanguage(initial);
+    })();
+  </script>
+</body>
+</html>
