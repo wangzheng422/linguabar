@@ -1,10 +1,17 @@
 // AI-Author: Codex (OpenAI gpt-5.6-sol)
+// AI-Author: Codex (OpenAI model not exposed by runtime)
 import Combine
 import Foundation
 import Translation
 
 @MainActor
 final class SubtitleStore: ObservableObject {
+    static let transcriptRetention: TimeInterval = 10 * 60
+
+    private struct TimedTranscript {
+        var text: String
+        let firstHeardAt: Date
+    }
     private enum PreferenceKey {
         static let sourceLanguage = "sourceLanguage"
         static let audioSource = "audioSource"
@@ -23,6 +30,7 @@ final class SubtitleStore: ObservableObject {
     @Published private(set) var englishText = "Waiting for meeting audio…"
     @Published private(set) var chineseText = "正在等待会议音频…"
     @Published private(set) var translationInput = ""
+    @Published private(set) var translationRevision = UUID()
     @Published var alwaysOnTop = true
     @Published var sourceLanguage: SourceLanguage {
         didSet {
@@ -49,19 +57,31 @@ final class SubtitleStore: ObservableObject {
 
     private let defaults: UserDefaults
     private let sourceProvider: () -> [AudioSource]
+    private let now: () -> Date
     private let audioTap = CoreAudioProcessTap()
     private let transcriber = SpeechTranscriber()
+    let archive: SessionArchiveStore
+    private var listeningSession: ListeningSession?
+    private var captureGeneration = UUID()
+    private var isFinishingCapture = false
     private var translationDebounce: Task<Void, Never>?
-    private var finalizedTranscriptSegments: [String] = []
-    private var currentTranscript = ""
+    private var finalizedTranscriptSegments: [TimedTranscript] = []
+    private var currentTranscript: TimedTranscript?
+    private var expirationTimer: AnyCancellable?
+    private(set) var recognitionEpoch: UInt64 = 0
     private var isApplyingAutomaticSourceSelection = false
 
     init(
         defaults: UserDefaults = .standard,
-        sourceProvider: @escaping () -> [AudioSource] = CoreAudioProcessTap.availableSources
+        sourceProvider: @escaping () -> [AudioSource] = CoreAudioProcessTap.availableSources,
+        now: @escaping () -> Date = Date.init,
+        automaticallyPrune: Bool = true,
+        archive: SessionArchiveStore? = nil
     ) {
         self.defaults = defaults
         self.sourceProvider = sourceProvider
+        self.now = now
+        self.archive = archive ?? SessionArchiveStore()
         selectedSourceID = AudioSource.system.id
         sourceLanguage = defaults.string(forKey: PreferenceKey.sourceLanguage)
             .flatMap(SourceLanguage.init(rawValue:)) ?? .english
@@ -76,6 +96,11 @@ final class SubtitleStore: ObservableObject {
             defaults.set(maximumTranscriptLines, forKey: PreferenceKey.maximumTranscriptLines)
         }
         refreshSources()
+        if automaticallyPrune {
+            expirationTimer = Timer.publish(every: 1, on: .main, in: .common)
+                .autoconnect()
+                .sink { [weak self] _ in self?.removeExpiredTranscripts() }
+        }
     }
 
     var selectedSource: AudioSource {
@@ -111,21 +136,34 @@ final class SubtitleStore: ObservableObject {
     }
 
     func startCapture() async {
+        guard !status.isCapturing, status != .requestingPermission else { return }
+        let generation = UUID()
+        captureGeneration = generation
         status = .requestingPermission
         guard await SpeechTranscriber.requestAuthorization() else {
             status = .failed("请在系统设置中允许 LinguaBar 使用语音识别。")
             return
         }
+        guard captureGeneration == generation else { return }
 
         do {
             resetTranscriptHistory()
-            try transcriber.start(
+            let session = beginListeningSession()
+            recognitionEpoch = try transcriber.start(
                 localeIdentifier: sourceLanguage.speechLocaleIdentifier,
-                onResult: { [weak self] text, isFinal in
-                    Task { @MainActor in self?.acceptTranscript(text, isFinal: isFinal) }
+                onResult: { [weak self] text, isFinal, epoch in
+                    // This runs on the recognizer's serial queue BEFORE enqueueing UI
+                    // work. stop() drains that queue, so the export includes every
+                    // delivered result even when its UI update has not run yet.
+                    session.record(text, isFinal: isFinal)
+                    Task { @MainActor in
+                        guard self?.captureGeneration == generation, self?.isFinishingCapture == false else { return }
+                        self?.acceptTranscript(text, isFinal: isFinal, epoch: epoch)
+                    }
                 },
                 onError: { [weak self] message in
                     Task { @MainActor in
+                        guard self?.captureGeneration == generation, self?.isFinishingCapture == false else { return }
                         self?.status = .warning("语音识别正在重连：\(message)")
                     }
                 }
@@ -134,7 +172,10 @@ final class SubtitleStore: ObservableObject {
                 source: selectedSource,
                 onAudio: { [weak self] buffer in self?.transcriber.append(buffer) },
                 onWarning: { [weak self] message in
-                    Task { @MainActor in self?.status = .warning(message) }
+                    Task { @MainActor in
+                        guard self?.captureGeneration == generation, self?.isFinishingCapture == false else { return }
+                        self?.status = .warning(message)
+                    }
                 }
             )
             englishText = sourceLanguage == .chinese
@@ -147,56 +188,134 @@ final class SubtitleStore: ObservableObject {
         } catch {
             transcriber.stop()
             audioTap.stop()
+            captureGeneration = UUID()
+            saveListeningSession()
             status = .failed(error.localizedDescription)
         }
     }
 
     func stopCapture() {
+        guard !isFinishingCapture else { return }
         translationDebounce?.cancel()
         translationDebounce = nil
         audioTap.stop()
-        transcriber.stop()
-        status = .idle
+        guard listeningSession != nil else {
+            transcriber.stop()
+            captureGeneration = UUID()
+            status = .idle
+            return
+        }
+        isFinishingCapture = true
+        status = .finishing
+        Task { [self] in
+            await transcriber.finish()
+            captureGeneration = UUID()
+            saveListeningSession()
+            isFinishingCapture = false
+            status = .idle
+        }
     }
 
-    func acceptTranslation(_ translation: String, for source: String) {
-        guard source == translationInput else { return }
+    private func saveListeningSession() {
+        guard let session = listeningSession else { return }
+        listeningSession = nil
+        archive.enqueue(session.seal())
+    }
+
+    @discardableResult
+    func beginListeningSession() -> ListeningSession {
+        let session = ListeningSession(startedAt: now(), language: sourceLanguage)
+        listeningSession = session
+        return session
+    }
+
+    func acceptTranslation(_ translation: String, for source: String, revision: UUID) {
+        removeExpiredTranscripts()
+        guard revision == translationRevision, !source.isEmpty,
+              source == translationInput else { return }
         chineseText = TranscriptFormatter.retainingLastLines(
             TranscriptFormatter.paragraphized(translation),
             maximum: maximumTranscriptLines
         )
     }
 
-    private func acceptTranscript(_ text: String, isFinal: Bool) {
+    func acceptTranscript(_ text: String, isFinal: Bool, epoch: UInt64) {
+        guard epoch == recognitionEpoch else { return }
+        removeExpiredTranscripts()
+        guard epoch == recognitionEpoch else { return }
         let transcript = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !transcript.isEmpty else { return }
 
         if isFinal {
-            if finalizedTranscriptSegments.last != transcript {
-                finalizedTranscriptSegments.append(transcript)
-                trimFinalizedTranscriptHistory()
-            }
-            currentTranscript = ""
+            finalizedTranscriptSegments.append(TimedTranscript(
+                text: transcript,
+                firstHeardAt: currentTranscript?.firstHeardAt ?? now()
+            ))
+            trimFinalizedTranscriptHistory()
+            currentTranscript = nil
         } else {
-            currentTranscript = transcript
+            currentTranscript = TimedTranscript(
+                text: TranscriptFormatter.retainingLastLines(
+                    TranscriptFormatter.paragraphized(transcript), maximum: maximumTranscriptLines
+                ),
+                firstHeardAt: currentTranscript?.firstHeardAt ?? now()
+            )
         }
 
         let displayText = currentLimitedDisplayText()
         englishText = displayText
         if case .warning = status { status = .listening }
-        guard sourceLanguage.needsChineseTranslation else { return }
-        translationDebounce?.cancel()
         let delay: UInt64 = isFinal ? 50_000_000 : 380_000_000
+        scheduleTranslation(displayText, delay: delay)
+    }
+
+    private func scheduleTranslation(_ displayText: String, delay: UInt64) {
+        invalidateTranslation()
+        guard sourceLanguage.needsChineseTranslation, !displayText.isEmpty else { return }
         translationDebounce = Task { [weak self] in
             try? await Task.sleep(nanoseconds: delay)
             guard !Task.isCancelled else { return }
             self?.translationInput = displayText
+            self?.translationRevision = UUID()
         }
     }
 
     private func resetTranscriptHistory() {
         finalizedTranscriptSegments = []
-        currentTranscript = ""
+        currentTranscript = nil
+        invalidateTranslation()
+    }
+
+    private func invalidateTranslation() {
+        translationDebounce?.cancel()
+        translationDebounce = nil
+        translationInput = ""
+        translationRevision = UUID()
+    }
+
+    func clearTranscript() {
+        // A fresh recognition epoch also rejects results already queued for the main actor.
+        recognitionEpoch = transcriber.resetTranscript(preservingPartialResult: true)
+        resetTranscriptHistory()
+        englishText = ""
+        chineseText = ""
+    }
+
+    func removeExpiredTranscripts() {
+        let cutoff = now().addingTimeInterval(-Self.transcriptRetention)
+        let originalCount = finalizedTranscriptSegments.count
+        finalizedTranscriptSegments.removeAll { $0.firstHeardAt <= cutoff }
+        let partialExpired = currentTranscript.map { $0.firstHeardAt <= cutoff } ?? false
+        if partialExpired {
+            currentTranscript = nil
+            recognitionEpoch = transcriber.resetTranscript(preservingPartialResult: true)
+        }
+        guard originalCount != finalizedTranscriptSegments.count || partialExpired else { return }
+        englishText = currentLimitedDisplayText()
+        // Translation is a snapshot of the whole retained source. Clear it immediately
+        // rather than leave expired words visible while the replacement is translated.
+        chineseText = ""
+        scheduleTranslation(englishText, delay: 0)
     }
 
     private func applyAutomaticSourceSelection(_ identifier: String) {
@@ -208,35 +327,29 @@ final class SubtitleStore: ObservableObject {
     private func currentLimitedDisplayText() -> String {
         TranscriptFormatter.retainingLastLines(
             TranscriptFormatter.displayText(
-                finalized: finalizedTranscriptSegments,
-                current: currentTranscript
+                finalized: finalizedTranscriptSegments.map(\.text),
+                current: currentTranscript?.text ?? ""
             ),
             maximum: maximumTranscriptLines
         )
     }
 
     private func trimFinalizedTranscriptHistory() {
-        let finalized = TranscriptFormatter.retainingLastLines(
-            TranscriptFormatter.displayText(finalized: finalizedTranscriptSegments, current: ""),
-            maximum: maximumTranscriptLines
-        )
-        finalizedTranscriptSegments = finalized.isEmpty
-            ? []
-            : finalized.components(separatedBy: .newlines)
+        finalizedTranscriptSegments = Array(finalizedTranscriptSegments.flatMap { segment in
+            TranscriptFormatter.paragraphized(segment.text).components(separatedBy: .newlines)
+                .filter { !$0.isEmpty }
+                .map { TimedTranscript(text: $0, firstHeardAt: segment.firstHeardAt) }
+        }.suffix(maximumTranscriptLines))
     }
 
     private func applyTranscriptLineLimit() {
         trimFinalizedTranscriptHistory()
-        guard !finalizedTranscriptSegments.isEmpty || !currentTranscript.isEmpty else { return }
+        removeExpiredTranscripts()
+        guard !finalizedTranscriptSegments.isEmpty || currentTranscript != nil else { return }
         let limitedDisplay = currentLimitedDisplayText()
         englishText = limitedDisplay
-        chineseText = TranscriptFormatter.retainingLastLines(
-            chineseText,
-            maximum: maximumTranscriptLines
-        )
-        if sourceLanguage.needsChineseTranslation {
-            translationInput = limitedDisplay
-        }
+        chineseText = ""
+        scheduleTranslation(limitedDisplay, delay: 0)
     }
 
     deinit {

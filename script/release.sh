@@ -10,9 +10,9 @@ release_root="${RELEASE_OUTPUT_DIR:-${project_root}/dist/releases}"
 /bin/mkdir -p "${release_root}"
 release_root="${release_root:A}"
 name="LinguaBar-${version}-macos-arm64"
-for extension in dmg zip; do
-  [[ ! -e "${release_root}/${name}.${extension}" ]] || {
-    print -u2 "Existing release: ${name}.${extension}; choose a new RELEASE_OUTPUT_DIR."
+for artifact in "${name}.dmg" "${name}.zip" "LinguaBar-${version}-source.tar.gz" SHA256SUMS.txt; do
+  [[ ! -e "${release_root}/${artifact}" ]] || {
+    print -u2 "Existing release: ${artifact}; choose a new RELEASE_OUTPUT_DIR."
     exit 1
   }
 done
@@ -63,9 +63,10 @@ fi
 source_stage="${staging}/linguabar-${version}"
 /bin/mkdir -p "${source_stage}"
 for item in Sources Tests Resources script docs Package.swift README.md README.zh-CN.md LICENSE THIRD_PARTY_NOTICES.md upstream.lock; do
-  /usr/bin/ditto "${project_root}/${item}" "${source_stage}/${item}"
+  /usr/bin/ditto --norsrc --noextattr --noqtn "${project_root}/${item}" "${source_stage}/${item}"
 done
-/usr/bin/tar -czf "${release_root}/LinguaBar-${version}-source.tar.gz" -C "${staging}" "linguabar-${version}"
+COPYFILE_DISABLE=1 /usr/bin/tar --no-xattrs --no-acls --no-fflags --uid 0 --gid 0 --uname root --gname wheel \
+  -czf "${release_root}/LinguaBar-${version}-source.tar.gz" -C "${staging}" "linguabar-${version}"
 (
   cd "${release_root}"
   /usr/bin/shasum -a 256 "${name}.dmg" "${name}.zip" "LinguaBar-${version}-source.tar.gz" > SHA256SUMS.txt

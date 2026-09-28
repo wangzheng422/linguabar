@@ -1,4 +1,5 @@
 // AI-Author: Codex (OpenAI gpt-5.6-sol)
+// AI-Author: Codex (OpenAI model not exposed by runtime)
 import AppKit
 import SwiftUI
 import Translation
@@ -10,6 +11,7 @@ struct ContentView: View {
         target: Locale.Language(identifier: "zh-Hans")
     )
     @State private var translationSource = ""
+    @State private var translationRequestRevision = UUID()
     @State private var splitFraction = 0.48
     @State private var isDividerHovered = false
     @State private var isDividerDragging = false
@@ -32,14 +34,15 @@ struct ContentView: View {
                 subtitles
                 Divider().overlay(Color.white.opacity(0.12))
                 controlBar
+                SessionArchiveView(archive: store.archive)
             }
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
         .padding(8)
         .background(WindowConfigurator(alwaysOnTop: store.alwaysOnTop))
-        .onChange(of: store.translationInput) { _, newValue in
-            guard !newValue.isEmpty else { return }
-            translationSource = newValue
+        .onChange(of: store.translationRevision) { _, revision in
+            translationSource = store.translationInput
+            translationRequestRevision = revision
             translationConfiguration.invalidate()
         }
         .onChange(of: store.sourceLanguage) { _, language in
@@ -54,10 +57,11 @@ struct ContentView: View {
         }
         .translationTask(translationConfiguration) { session in
             let source = translationSource
+            let revision = translationRequestRevision
             guard store.sourceLanguage.needsChineseTranslation, !source.isEmpty else { return }
             do {
                 let response = try await session.translate(source)
-                store.acceptTranslation(response.targetText, for: source)
+                store.acceptTranslation(response.targetText, for: source, revision: revision)
             } catch {
                 // The status area remains focused on capture failures. Translation
                 // can recover automatically after its language assets are ready.
@@ -81,6 +85,25 @@ struct ContentView: View {
             }
 
             Spacer(minLength: 16)
+
+            Button {
+                store.clearTranscript()
+            } label: {
+                Label("清空", systemImage: "trash")
+                    .font(.callout)
+                    .foregroundStyle(.white.opacity(0.9))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                    }
+            }
+            .buttonStyle(.plain)
+            .fixedSize()
+            .keyboardShortcut("k", modifiers: [.command, .shift])
+            .help("仅清空屏幕上的字幕；本场完整文字仍会在停止时自动保存")
 
             AudioSourcePopUp(
                 selection: $store.selectedSourceID,
@@ -233,6 +256,7 @@ struct ContentView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(store.status.isCapturing ? .red : .cyan)
+            .disabled(store.status == .finishing || store.status == .requestingPermission)
             .keyboardShortcut(.return, modifiers: [])
         }
         .padding(.horizontal, 22)
@@ -243,7 +267,7 @@ struct ContentView: View {
     private var statusColor: Color {
         switch store.status {
         case .idle: return .gray
-        case .requestingPermission: return .yellow
+        case .requestingPermission, .finishing: return .yellow
         case .listening: return .green
         case .warning: return .orange
         case .failed: return .red

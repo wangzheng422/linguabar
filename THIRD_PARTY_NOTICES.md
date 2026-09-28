@@ -11,3 +11,4 @@ LinguaBar's `Sources/LinguaBar/Services/CoreAudioProcessTap.swift` derives from 
 Changes include a SwiftUI/AppKit interface, Apple Speech and Translation integration, meeting application selection, process-tree capture adaptation, persistent preferences, subtitle history, and display controls.
 
 LinguaBar 的采集代码由上述 Sokuji 文件改写；保留原作者权益和 AGPL v3 许可。发布二进制时请同时提供对应源码。Apple 系统框架由系统提供，不随源码包重新分发。
+

@@ -4,20 +4,24 @@
 
 ## Build locally / 本机构建
 
-Run on an Apple Silicon Mac with macOS 15+, Xcode's macOS SDK, and an accessible Developer ID Application certificate/private key:
+Run on an Apple Silicon Mac with macOS 15+, Xcode's macOS SDK, and an accessible Developer ID Application certificate and private key:
+
+在 Apple Silicon Mac 上运行，系统需为 macOS 15+，并安装 Xcode macOS SDK，同时可使用 Developer ID Application 证书和私钥：
 
 ```sh
 ./script/release.sh
 ```
 
-The script uses an optimized Swift Release build, signs with hardened runtime and a secure timestamp, and produces:
+The script builds the optimized Swift Release app, signs with hardened runtime and a secure timestamp, and creates:
 
-- `LinguaBar-0.1.0-macos-arm64.dmg` — app plus an Applications shortcut.
-- `LinguaBar-0.1.0-macos-arm64.zip` — the same signed app.
-- `LinguaBar-0.1.0-source.tar.gz` — corresponding source, resources, tests and build scripts.
-- `SHA256SUMS.txt` — SHA-256 checksums.
+- `LinguaBar-<version>-macos-arm64.dmg` — app plus an Applications shortcut / 应用及 Applications 快捷方式。
+- `LinguaBar-<version>-macos-arm64.zip` — the same signed app / 同一份已签名应用。
+- `LinguaBar-<version>-source.tar.gz` — matching source, resources, tests, and build scripts / 对应源码、资源、测试和构建脚本。
+- `SHA256SUMS.txt` — SHA-256 checksums for those three files / 上述三个文件的 SHA-256 校验和。
 
-默认输出到 `dist/releases/`，不会覆盖已有 DMG/ZIP，也不会停止正在运行的应用。版本号来自 `Resources/Info.plist`。再次制作可指定新的输出目录：
+The version comes from `Resources/Info.plist`. By default, files go to `dist/releases/`; existing DMG and ZIP files are not overwritten, and the running app is not stopped. To use another output directory:
+
+版本号来自 `Resources/Info.plist`。默认输出到 `dist/releases/`；不会覆盖已有 DMG 或 ZIP，也不会停止正在运行的应用。可指定其他输出目录：
 
 ```sh
 RELEASE_OUTPUT_DIR="$PWD/dist/releases-next" ./script/release.sh
@@ -25,42 +29,63 @@ RELEASE_OUTPUT_DIR="$PWD/dist/releases-next" ./script/release.sh
 
 ## Signing and notarization / 签名与公证
 
-The script selects the first visible Developer ID Application identity. If multiple teams are installed, explicitly choose one using `SIGNING_IDENTITY`. Local Xcode compilation, Developer ID signing, and Apple notarization are separate steps.
+The script selects the first visible Developer ID Application identity. If multiple teams are installed, choose one explicitly with `SIGNING_IDENTITY`. Local compilation, Developer ID signing, and Apple notarization are separate steps.
 
-当前脚本正式签名 App 和 DMG；仅检测到签名证书不代表已完成公证。配置过 `notarytool` 的钥匙串 profile 后，可执行：
+脚本默认选择第一个可见的 Developer ID Application 身份。如果安装了多个团队的证书，可通过 `SIGNING_IDENTITY` 明确指定。本机构建、Developer ID 签名和 Apple 公证是不同步骤。
 
-```sh
-NOTARY_PROFILE="your-existing-profile" RELEASE_OUTPUT_DIR="$PWD/dist/notarized" ./script/release.sh
-```
+Without `NOTARY_PROFILE`, the script creates a signed-only build. To submit the app and DMG to Apple, configure a `notarytool` keychain profile, then run:
 
-This submits the app ZIP to Apple, staples the app, packages both formats, then submits and staples the DMG. Failed submission or stapling stops the release. Never place passwords, API private keys or certificate exports in this repository.
-
-最终检查：
+未设置 `NOTARY_PROFILE` 时，脚本只生成签名版本。若要向 Apple 提交 App 和 DMG 进行公证，请先配置 `notarytool` 钥匙串 profile，再运行：
 
 ```sh
-(cd dist/releases && shasum -a 256 -c SHA256SUMS.txt)
-codesign --verify --deep --strict /path/to/LinguaBar.app
-spctl --assess --type execute --verbose=2 /path/to/LinguaBar.app
-xcrun stapler validate /path/to/LinguaBar.app
+NOTARY_PROFILE="YOUR_NOTARYTOOL_KEYCHAIN_PROFILE" RELEASE_OUTPUT_DIR="$PWD/dist/notarized" ./script/release.sh
 ```
 
-For checksum verification, change into the release output directory and run `shasum -a 256 -c SHA256SUMS.txt`.
+Replace the profile placeholder with the name of a profile already stored in your keychain. With the profile configured, the script submits the app ZIP, staples the accepted ticket to the app, builds the ZIP and DMG from that app, then submits and staples the DMG. Failed submission or stapling stops the release. Keep account passwords, API private keys, and certificate exports out of the repository.
 
-## Publish a release / 发布新版本
+将 profile 占位符替换为钥匙串中已保存的 profile 名称。配置后，脚本会提交 App ZIP、将获批票据附加到 App，再从该 App 制作 ZIP 和 DMG，之后提交并附加 DMG 票据。提交或附加失败时发行流程会停止。请勿将账户密码、API 私钥或证书导出文件放入仓库。
 
-Review the generated source archive before publishing: the script copies explicit top-level directories, so review their contents for credentials, local settings, build outputs and internal notes. Publish only the final source and deliverables.
+Verify the checksums from the output directory:
 
-1. Review both READMEs and the screenshots.
-2. Retain LICENSE, THIRD_PARTY_NOTICES.md and upstream.lock.
-3. Update the download links in both READMEs and the project website for the new version.
-4. Upload DMG, ZIP, matching source archive and SHA256SUMS together.
-5. State the actual signing/notarization outcome in the release description.
-6. Test installation from a browser-downloaded DMG on a separate Mac.
+在输出目录中校验文件：
 
-发布安装包时同时提供对应源码、上游许可和校验和。公证确认分发信任，不代表已验证所有 Mac 上的功能与权限流程。
+```sh
+release_dir="${RELEASE_OUTPUT_DIR:-$PWD/dist/releases}"
+(
+  cd "$release_dir"
+  shasum -a 256 -c SHA256SUMS.txt
+)
+```
 
-## Project website / 项目网站
+Then verify the app and disk image at their actual paths:
 
-The single-page site lives in `docs/index.html`, with local assets in `docs/images/`. GitHub Pages publishes `main` → `/docs`. It is plain HTML, CSS and JavaScript: no build step, external analytics or API credentials.
+然后使用实际路径检查 App 和磁盘映像：
 
-网页提供中英文切换，直接链接 GitHub Release。更新版本时同步检查网页和两份 README 中的下载链接。
+```sh
+codesign --verify --deep --strict "/path/to/LinguaBar.app"
+spctl --assess --type execute --verbose=2 "/path/to/LinguaBar.app"
+xcrun stapler validate "/path/to/LinguaBar.app"
+xcrun stapler validate "$release_dir/LinguaBar-<version>-macos-arm64.dmg"
+```
+
+Replace `/path/to/LinguaBar.app` and `<version>` with the app and version produced by the build. Run stapler validation only for an artifact that was notarized and stapled.
+
+将 `/path/to/LinguaBar.app` 和 `<version>` 替换为构建生成的 App 路径与版本号。仅对已完成公证并附加票据的产物运行 stapler 验证。
+
+## Prepare a public GitHub release / 准备 GitHub 公开发行版
+
+Use the existing public repository and create a release for the matching version tag. Before attaching artifacts:
+
+在现有公开仓库中为对应版本标签创建 Release。上传产物前：
+
+1. Review both READMEs and the screenshots. / 检查中英文 README 和截图。
+2. Inspect the generated source archive. The build script uses an explicit allowlist: `Sources`, `Tests`, `Resources`, `script`, `docs`, `Package.swift`, both READMEs, `LICENSE`, `THIRD_PARTY_NOTICES.md`, and `upstream.lock`. / 检查源码包。构建脚本只打包明确列出的目录和文件：`Sources`、`Tests`、`Resources`、`script`、`docs`、`Package.swift`、两个 README、`LICENSE`、`THIRD_PARTY_NOTICES.md` 和 `upstream.lock`。
+3. Attach the DMG, ZIP, matching source archive, and `SHA256SUMS.txt` to the same release. / 在同一 Release 中附上 DMG、ZIP、对应源码包和 `SHA256SUMS.txt`。
+4. State the actual signing and notarization outcome in the release description. / 在 Release 说明中写明实际签名和公证结果。
+5. Download the published DMG on a separate Mac and verify installation and first launch. / 在另一台 Mac 上下载 DMG，并验证安装和首次启动。
+
+## Xcode Cloud
+
+No Xcode Cloud workflow is configured for this Swift package. This release process uses local Xcode tools; the release script supports Developer ID signing and optional notarization.
+
+此 Swift package 尚未配置 Xcode Cloud 工作流。本发行流程使用本机 Xcode 工具；发行脚本支持 Developer ID 签名和可选公证。

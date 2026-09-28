@@ -1,4 +1,4 @@
 # AI-Author: Codex (OpenAI gpt-5.6-sol)
-# AI-Author: Codex (OpenAI model not exposed by runtime)
 UPSTREAM_URL=https://github.com/kizuna-ai-lab/sokuji.git
 UPSTREAM_COMMIT=87c7f03ffad800fd81cb453bed881c87725c1336
+

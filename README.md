@@ -7,7 +7,6 @@
 <p>Native macOS meeting captions and Chinese translation.</p>
 <p>macOS 15+ · Apple Silicon · SwiftUI · Apple Speech + Translation</p>
 <p><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
-<p><a href="https://wangzheng422.github.io/linguabar/">Website</a> · <a href="https://github.com/wangzheng422/linguabar/releases/latest">Download for Mac</a></p>
 <p><a href="#get-started">Get started</a> · <a href="#make-it-yours">Features</a> · <a href="docs/RELEASING.md">Build a release</a></p>
 </div>
 
@@ -32,6 +31,19 @@ LinguaBar captures audio playing on your Mac, shows a live transcript, and trans
 - **Preferences that stick.** Font size, opacity, language, history limit, and audio source return when you reopen the app.
 - **Native controls.** Pin the window, drag its background, and start or stop captions with `⌘⇧Space`.
 
+The flat, shadow-free Dock icon reflects capture status: a neutral marker while requesting permission, green play while listening, amber during a reconnect warning, red on capture failure, and the plain icon when idle or stopped. It reports capture state, not whether speech or translation is arriving. Third-party app switchers that cache static bundle icons may not reflect live changes.
+
+### Complete session text, saved when you stop
+
+LinguaBar saves each non-empty start-to-stop session as UTF-8 text in `Documents/LinguaBar`:
+
+The filenames below are illustrative examples.
+
+- `Original/2026-09-28-09-30-(project-budget-review).txt`: the complete source transcript.
+- `Chinese/2026-09-28-09-30-(project-budget-review).txt`: the full Chinese translation for English or Korean sessions. Chinese input creates only the Original file.
+
+Filenames combine the session's local start time with a sanitized English keyword summary. Korean and Chinese sessions may use a best-effort on-device English title translation; if it is unavailable or has no usable keywords, the filename uses `meeting-notes`. Collisions get a numeric suffix, never an overwrite. Clear, the on-screen line limit, and the ten-minute display retention affect only what is shown; they do not delete text already collected for the session archive. The original is saved first, followed by a full chunked Chinese translation when applicable; it may differ in wording from the live preview. The bottom bar shows progress, a save-folder shortcut, and retry on failure. Do not force-quit before saving finishes. Empty sessions create no files; Documents access or translation language downloads may be needed.
+
 <details>
 <summary>See the unpinned appearance</summary>
 
@@ -43,12 +55,12 @@ LinguaBar captures audio playing on your Mac, shows a live transcript, and trans
 
 **Requires macOS 15 or later.** The initial binary targets Apple Silicon (`arm64`); Intel is not included or validated.
 
-1. Open `LinguaBar-0.1.0-macos-arm64.dmg` and drag **LinguaBar** into **Applications**.
+1. Download [LinguaBar-0.2.0-macos-arm64.dmg](https://github.com/wangzheng422/linguabar/releases/download/v0.2.0/LinguaBar-0.2.0-macos-arm64.dmg) and drag **LinguaBar** into **Applications**.
 2. Launch the app, open your meeting, and choose its audio source.
 3. Select English, Korean, or Chinese, then click **开始字幕** (Start captions).
 4. Allow Speech Recognition and system audio recording when macOS requests them. Apple Translation may request a language download.
 
-Download the [0.1.0 DMG](https://github.com/wangzheng422/linguabar/releases/download/v0.1.0/LinguaBar-0.1.0-macos-arm64.dmg), or see [all release files and checksums](https://github.com/wangzheng422/linguabar/releases/tag/v0.1.0). The app and DMG are Developer ID signed, Apple notarized, and stapled. See [release preparation](docs/RELEASING.md).
+LinguaBar is published in the [public GitHub repository](https://github.com/wangzheng422/linguabar). The v0.2.0 app and DMG were accepted by Apple notarization and stapled on 2026-09-28; Gatekeeper accepts the app as **Notarized Developer ID**. See the [release notes](docs/RELEASE_NOTES.md) and [release guide](docs/RELEASING.md).
 
 ## Engines and privacy
 
@@ -59,7 +71,7 @@ Download the [0.1.0 DMG](https://github.com/wangzheng422/linguabar/releases/down
 | Chinese translation | Apple Translation on-device language models; initial downloads may be needed |
 | Punctuation | Apple punctuation plus pause-based comma / period hints |
 
-No third-party AI API key is required. Apple Speech may use Apple's servers depending on language and system support: **LinguaBar does not force offline recognition**. The app does not save an audio recording or transcript file. Preferences are stored locally; displayed history is bounded by the configured semantic-line limit.
+No third-party AI API key is required. Apple Speech may use Apple's servers depending on language and system support: **LinguaBar does not force offline recognition**. LinguaBar does not save audio recordings. Complete transcript and applicable translation files are saved to Documents after stopping; clearing the display or the ten-minute display retention does not delete session archives. They may sync if your Documents folder is cloud-synced. Manage or delete these archives according to your meeting privacy requirements. Preferences are stored locally.
 
 **Capture scope:** Google Meet in Chrome uses the Chrome process tree, so other Chrome tabs may also be captured. This is not isolated per-tab audio. Pause other browser audio when needed. Stop captions before changing the capture source or language.
 
@@ -78,7 +90,7 @@ Run checks or create an optimized release without restarting your current app:
 ./script/release.sh
 ```
 
-The [release guide](docs/RELEASING.md) covers DMG, ZIP, matching source archives, checksums, signing, and notarization. See [0.1.0 release notes](docs/RELEASE_NOTES.md).
+The [release guide](docs/RELEASING.md) covers DMG, ZIP, matching source archives, checksums, signing, and notarization. See the [release notes](docs/RELEASE_NOTES.md).
 
 ## Troubleshooting
 
