@@ -53,14 +53,14 @@ LinguaBar 将每次非空的开始到停止记录为一场，并自动保存 UTF
 
 ## 开始使用
 
-**需要 macOS 15 或更新版本。** 首个安装包面向 Apple Silicon（`arm64`），尚未包含或验证 Intel 版本。
+**需要 macOS 15 或更新版本。** 当前 v0.2.1 安装包面向 Apple Silicon（`arm64`），尚未包含或验证 Intel 版本。
 
-1. 下载 [LinguaBar-0.2.0-macos-arm64.dmg](https://github.com/wangzheng422/linguabar/releases/download/v0.2.0/LinguaBar-0.2.0-macos-arm64.dmg)，将 **LinguaBar** 拖入 **Applications**。
+1. 下载 [LinguaBar-0.2.1-macos-arm64.dmg](https://github.com/wangzheng422/linguabar/releases/download/v0.2.1/LinguaBar-0.2.1-macos-arm64.dmg)，将 **LinguaBar** 拖入 **Applications**。
 2. 启动应用，打开会议，选择音频来源。
 3. 选择 English、한국어 或中文，然后点击 **开始字幕**。
 4. 按 macOS 提示允许语音识别、系统音频录制；首次翻译可能需要下载语言包。
 
-LinguaBar 已在 [GitHub 公开仓库](https://github.com/wangzheng422/linguabar)发布。0.2.0 App 与 DMG 已于 2026-09-28 通过 Apple 公证并附加票据；Gatekeeper 将该 App 识别为 **Notarized Developer ID**。详见[发布说明](docs/RELEASE_NOTES.md)和[发行指南](docs/RELEASING.md)。
+LinguaBar 已在 [GitHub 公开仓库](https://github.com/wangzheng422/linguabar)发布。0.2.1 App 与 DMG 已于 2026-09-28 通过 Apple 公证并附加票据；Gatekeeper 将该 App 识别为 **Notarized Developer ID**。详见[发布说明](docs/RELEASE_NOTES.md)和[发行指南](docs/RELEASING.md)。
 
 ## 引擎与隐私
 

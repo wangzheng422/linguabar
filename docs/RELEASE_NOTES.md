@@ -1,3 +1,21 @@
+# LinguaBar 0.2.1
+
+<!-- AI-Author: Codex (OpenAI model not exposed by runtime) -->
+
+macOS 15+ · Apple Silicon (`arm64`) · v0.2.1 release / 0.2.1 正式版
+
+## Downloads / 下载
+
+- [Apple Silicon DMG](https://github.com/wangzheng422/linguabar/releases/download/v0.2.1/LinguaBar-0.2.1-macos-arm64.dmg)
+- [ZIP app](https://github.com/wangzheng422/linguabar/releases/download/v0.2.1/LinguaBar-0.2.1-macos-arm64.zip)
+- [Matching source archive](https://github.com/wangzheng422/linguabar/releases/download/v0.2.1/LinguaBar-0.2.1-source.tar.gz)
+- [SHA256SUMS.txt](https://github.com/wangzheng422/linguabar/releases/download/v0.2.1/SHA256SUMS.txt)
+
+- Details about this update and package verification are in the [v0.2.1 release notes](RELEASE_NOTES_0.2.1.md).
+  更新内容与软件包验证详见 [v0.2.1 发布说明](RELEASE_NOTES_0.2.1.md)。
+
+## Previous release / 上一版本
+
 # LinguaBar 0.2.0
 
 <!-- AI-Author: Codex (OpenAI model not exposed by runtime) -->

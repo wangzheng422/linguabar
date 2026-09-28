@@ -1,6 +1,8 @@
 // AI-Author: Codex (OpenAI gpt-5.6-sol)
 // Adapted from kizuna-ai-lab/sokuji native/audio-host/mac/main.swift at
 // 87c7f03ffad800fd81cb453bed881c87725c1336 (AGPL-3.0).
+// Rendering diagnostics synchronized through upstream
+// 821a641ecb510d591b3e8b542bfbf798c80f0f9c; capture scope remains unchanged.
 import AppKit
 import AudioToolbox
 import AVFoundation
@@ -103,12 +105,18 @@ private func audioObjects(inProcessTree rootProcessID: pid_t) -> [AudioObjectID]
     }
 }
 
-private func isRendering(_ objects: [AudioObjectID]) -> Bool {
-    objects.contains { boolProperty($0, kAudioProcessPropertyIsRunningOutput) }
+private func isRendering(_ objects: [AudioObjectID], excluding roots: Set<pid_t> = []) -> Bool {
+    AudioRenderingActivity.isRendering(
+        objects,
+        excluding: roots,
+        processID: processID(of:),
+        parentProcessID: parentProcessID(of:),
+        isRunningOutput: { boolProperty($0, kAudioProcessPropertyIsRunningOutput) }
+    )
 }
 
 @available(macOS 14.2, *)
-private func makeTapDescription(
+func makeTapDescription(
     processes: [AudioObjectID]?,
     identifier: UUID
 ) -> CATapDescription {
@@ -412,9 +420,12 @@ final class CoreAudioProcessTap: @unchecked Sendable {
 
         let rendering: Bool
         if targetProcessID == nil {
-            rendering = isRendering(audioObjectIDs(kAudioHardwarePropertyProcessObjectList))
+            rendering = isRendering(
+                audioObjectIDs(kAudioHardwarePropertyProcessObjectList), excluding: [getpid()]
+            )
         } else {
-            rendering = !currentProcessObjects.isEmpty && isRendering(currentProcessObjects)
+            rendering = !currentProcessObjects.isEmpty
+                && isRendering(currentProcessObjects, excluding: [getpid()])
         }
         if rendering {
             if renderingSince == nil { renderingSince = Date() }
@@ -430,7 +441,7 @@ final class CoreAudioProcessTap: @unchecked Sendable {
            Date().timeIntervalSince(startedAt) > 3,
            renderingLongEnough {
             warnedAboutPermission = true
-            onWarning("系统正在播放声音，但捕获到的音频全为静音。请在系统设置中允许 LinguaBar 录制系统音频。")
+            onWarning("检测到输出音频流，但采集持续静音（也可能尚未发声）。若确认有声音，请检查 LinguaBar 的系统音频录制权限。")
         }
     }
 
