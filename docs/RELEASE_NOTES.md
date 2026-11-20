@@ -1,4 +1,14 @@
-# LinguaBar 0.2.1
+# LinguaBar 0.2.2
+
+macOS 15+ · Apple Silicon (`arm64`)
+
+- 实时翻译在连续转写期间持续更新。 Live translations now appear during continuous transcription.
+- 复用实时翻译会话。归档落盘后释放全文内存。 Live translation sessions are reused, and saved archives release in-memory transcript payloads.
+- 静音采集提示显示默认音频输出和连接类型。 Silent-capture diagnostics include the default output device and transport.
+
+[下载 / Downloads](https://github.com/wangzheng422/linguabar/releases/tag/v0.2.2)
+
+## LinguaBar 0.2.1
 
 <!-- AI-Author: Codex (OpenAI model not exposed by runtime) -->
 

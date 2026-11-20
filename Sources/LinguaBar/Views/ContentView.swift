@@ -6,12 +6,6 @@ import Translation
 
 struct ContentView: View {
     @ObservedObject var store: SubtitleStore
-    @State private var translationConfiguration = TranslationSession.Configuration(
-        source: Locale.Language(identifier: "en"),
-        target: Locale.Language(identifier: "zh-Hans")
-    )
-    @State private var translationSource = ""
-    @State private var translationRequestRevision = UUID()
     @State private var splitFraction = 0.48
     @State private var isDividerHovered = false
     @State private var isDividerDragging = false
@@ -40,32 +34,11 @@ struct ContentView: View {
         }
         .padding(8)
         .background(WindowConfigurator(alwaysOnTop: store.alwaysOnTop))
-        .onChange(of: store.translationRevision) { _, revision in
-            translationSource = store.translationInput
-            translationRequestRevision = revision
-            translationConfiguration.invalidate()
-        }
-        .onChange(of: store.sourceLanguage) { _, language in
-            translationSource = ""
-            translationConfiguration.invalidate()
-            if let identifier = language.translationLanguageIdentifier {
-                translationConfiguration = TranslationSession.Configuration(
-                    source: Locale.Language(identifier: identifier),
-                    target: Locale.Language(identifier: "zh-Hans")
-                )
-            }
-        }
-        .translationTask(translationConfiguration) { session in
-            let source = translationSource
-            let revision = translationRequestRevision
-            guard store.sourceLanguage.needsChineseTranslation, !source.isEmpty else { return }
-            do {
-                let response = try await session.translate(source)
-                store.acceptTranslation(response.targetText, for: source, revision: revision)
-            } catch {
-                // The status area remains focused on capture failures. Translation
-                // can recover automatically after its language assets are ready.
-            }
+        .background {
+            // Stable, independent language lanes avoid cancelling framework requests
+            // even on language changes. Each lane has one active and one latest item.
+            LiveTranslationTask(store: store, language: .english)
+            LiveTranslationTask(store: store, language: .korean)
         }
     }
 
@@ -150,7 +123,7 @@ struct ContentView: View {
 
                     SubtitleTextPanel(
                         language: "简体中文 · 实时翻译",
-                        text: store.chineseText,
+                        text: store.translationError ?? store.chineseText,
                         color: Color(red: 0.43, green: 0.88, blue: 1),
                         fontSize: subtitleFontSize,
                         weight: .semibold

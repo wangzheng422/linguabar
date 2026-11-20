@@ -53,6 +53,26 @@ final class TranscriptRetentionTests: XCTestCase {
         XCTAssertEqual(store.englishText, "New words.")
     }
 
+    func testContinuousPartialsSubmitAndDisplayTranslationBeforeSpeechPauses() async throws {
+        let store = makeStore()
+        hear("First partial", in: store, final: false)
+        let channel = store.translationChannel(for: .english)
+        var request: LiveTranslationChannel.Request?
+        for index in 0..<10 {
+            try await Task.sleep(for: .milliseconds(60))
+            hear("Updated partial \(index)", in: store, final: false)
+            if request == nil { request = channel.takeLatest() }
+        }
+        let first = try XCTUnwrap(request)
+        for index in 10..<20 {
+            try await Task.sleep(for: .milliseconds(60))
+            hear("Updated partial \(index)", in: store, final: false)
+        }
+        XCTAssertNotEqual(first.text, store.translationInput)
+        store.acceptTranslation("已翻译", for: first.text, revision: first.revision)
+        XCTAssertEqual(store.chineseText, "已翻译")
+    }
+
     func testClearRejectsOldTranslationEvenWhenIdenticalWordsAreSpokenAgain() async throws {
         let store = makeStore()
         hear("Hello.", in: store)

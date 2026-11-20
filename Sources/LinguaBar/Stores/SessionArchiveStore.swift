@@ -1,4 +1,5 @@
 import Combine
+import CryptoKit
 import Foundation
 
 /// Full-session exports are independent of the short, disposable on-screen history.
@@ -23,10 +24,23 @@ final class SessionArchiveStore: ObservableObject {
     }
 
     private struct Job {
-        let snapshot: ListeningSessionSnapshot
+        let id: UUID
+        let startedAt: Date
+        let language: SourceLanguage
+        let originalDigest: SHA256.Digest
+        // Retain the full payload only until the original has reached disk.
+        var unsavedText: String?
         var destination: SessionArchiveDestination?
         var titleAttempted = false
         var failed = false
+
+        init(snapshot: ListeningSessionSnapshot) {
+            id = snapshot.id
+            startedAt = snapshot.startedAt
+            language = snapshot.language
+            originalDigest = SHA256.hash(data: Data(snapshot.text.utf8))
+            unsavedText = snapshot.text
+        }
     }
 
     @Published private(set) var request: TranslationRequest?
@@ -37,21 +51,27 @@ final class SessionArchiveStore: ObservableObject {
     private let writer: SessionArchiveWriter
     private var jobs: [UUID: Job] = [:]
     private var queue: [UUID] = []
-    private var acceptedSessions: Set<UUID> = []
+    private var completedSessions: Set<UUID> = []
+    private var completionOrder: [UUID] = []
+    private let completedSessionLimit: Int
 
-    init(writer: SessionArchiveWriter = SessionArchiveWriter()) {
+    init(writer: SessionArchiveWriter = SessionArchiveWriter(), completedSessionLimit: Int = 128) {
+        precondition(completedSessionLimit > 0)
         self.writer = writer
+        self.completedSessionLimit = completedSessionLimit
     }
 
     var directory: URL { writer.rootDirectory }
     var hasUnfinishedExports: Bool { !jobs.isEmpty }
+    var retainedTranscriptCount: Int { jobs.values.filter { $0.unsavedText != nil }.count }
+    var completedSessionCount: Int { completedSessions.count }
 
     func enqueue(_ snapshot: ListeningSessionSnapshot) {
         guard !snapshot.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             if jobs.isEmpty { message = "本次没有识别到文字，未生成文件" }
             return
         }
-        guard acceptedSessions.insert(snapshot.id).inserted else { return }
+        guard jobs[snapshot.id] == nil, !completedSessions.contains(snapshot.id) else { return }
         jobs[snapshot.id] = Job(snapshot: snapshot)
         // Write original immediately. Translation/model-download failures must never
         // prevent already recognized words from reaching disk.
@@ -62,7 +82,7 @@ final class SessionArchiveStore: ObservableObject {
 
     func retryFailures() {
         let ids = jobs.values.filter(\.failed)
-            .sorted { $0.snapshot.startedAt < $1.snapshot.startedAt }.map { $0.snapshot.id }
+            .sorted { $0.startedAt < $1.startedAt }.map { $0.id }
         for id in ids {
             jobs[id]?.failed = false
             if persistOriginal(for: id) { queue.append(id) }
@@ -86,7 +106,7 @@ final class SessionArchiveStore: ObservableObject {
             if let destination = job.destination {
                 // A title is optional; retain the safely saved original if renaming fails.
                 if let renamed = try? writer.updateSummary(
-                    for: destination, startedAt: job.snapshot.startedAt,
+                    for: destination, startedAt: job.startedAt,
                     englishSummary: translations.joined(separator: " ")) {
                     job.destination = renamed
                     lastOriginalURL = renamed.originalURL
@@ -126,11 +146,13 @@ final class SessionArchiveStore: ObservableObject {
         guard var job = jobs[id] else { return false }
         if job.destination != nil { return true }
         do {
+            guard let text = job.unsavedText else { return false }
             let destination = try writer.saveOriginal(
-                job.snapshot.text, startedAt: job.snapshot.startedAt,
-                englishSummary: job.snapshot.language == .english ? job.snapshot.text : "meeting-notes",
-                language: job.snapshot.language)
+                text, startedAt: job.startedAt,
+                englishSummary: job.language == .english ? text : "meeting-notes",
+                language: job.language)
             job.destination = destination
+            job.unsavedText = nil
             jobs[id] = job
             lastOriginalURL = destination.originalURL
             return true
@@ -145,16 +167,18 @@ final class SessionArchiveStore: ObservableObject {
         while !queue.isEmpty {
             let id = queue.removeFirst()
             guard let job = jobs[id], !job.failed, let destination = job.destination else { continue }
-            if job.snapshot.language != .english, !job.titleAttempted {
+            if job.language != .english, !job.titleAttempted {
+                guard let text = loadOriginal(for: job) else { continue }
                 message = "原文已保存，正在生成英文文件名…"
-                request = TranslationRequest(sessionID: id, language: job.snapshot.language,
-                                             purpose: .title, chunks: [String(job.snapshot.text.prefix(600))])
+                request = TranslationRequest(sessionID: id, language: job.language,
+                                             purpose: .title, chunks: [String(text.prefix(600))])
                 return
             }
-            if job.snapshot.language.needsChineseTranslation {
+            if job.language.needsChineseTranslation {
+                guard let text = loadOriginal(for: job) else { continue }
                 message = "原文已保存，正在翻译并保存全文…"
-                request = TranslationRequest(sessionID: id, language: job.snapshot.language,
-                                             purpose: .chinese, chunks: Self.chunks(job.snapshot.text))
+                request = TranslationRequest(sessionID: id, language: job.language,
+                                             purpose: .chinese, chunks: Self.chunks(text))
                 return
             }
             finish(id, originalURL: destination.originalURL, bilingual: false)
@@ -164,8 +188,31 @@ final class SessionArchiveStore: ObservableObject {
 
     private func finish(_ id: UUID, originalURL: URL, bilingual: Bool) {
         jobs.removeValue(forKey: id)
+        completedSessions.insert(id)
+        completionOrder.append(id)
+        if completionOrder.count > completedSessionLimit {
+            completedSessions.remove(completionOrder.removeFirst())
+        }
         lastOriginalURL = originalURL
         message = bilingual ? "已保存完整原文和中文译文" : "已保存完整中文原文"
+    }
+
+    private func loadOriginal(for job: Job) -> String? {
+        do {
+            guard let destination = job.destination else { return nil }
+            let data = try Data(contentsOf: destination.originalURL)
+            // The writer appends exactly one LF byte. Remove that byte rather than
+            // a Character, which could also remove an original trailing CR.
+            guard data.last == 0x0A,
+                  SHA256.hash(data: data.dropLast()) == job.originalDigest,
+                  let text = String(data: data.dropLast(), encoding: .utf8) else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            return text
+        } catch {
+            recordFailure(job.id, error.localizedDescription)
+            return nil
+        }
     }
 
     private func recordFailure(_ id: UUID, _ reason: String) {

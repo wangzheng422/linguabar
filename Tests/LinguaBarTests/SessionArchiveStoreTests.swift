@@ -6,6 +6,101 @@ import XCTest
 final class SessionArchiveStoreTests: XCTestCase {
     private let startedAt = Date(timeIntervalSince1970: 1_759_089_600)
 
+    func testSavedQueuedAndFailedJobsReleasePayloadAndReloadExactText() throws {
+        let (store, root) = makeStore()
+        defer { removeTestRoot(root) }
+        let first = makeSnapshot(language: .english, text: "First")
+        let second = makeSnapshot(language: .english, text: "完整🙂\n\ntrailing CR\r")
+        store.enqueue(first)
+        let firstRequest = try XCTUnwrap(store.request)
+        store.enqueue(second)
+        XCTAssertEqual(store.retainedTranscriptCount, 0)
+
+        store.fail(firstRequest.id, message: "unavailable")
+        let secondRequest = try XCTUnwrap(store.request)
+        XCTAssertEqual(secondRequest.chunks.joined(), second.text)
+        store.fail(secondRequest.id, message: "unavailable")
+        XCTAssertEqual(store.failureCount, 2)
+        XCTAssertEqual(store.retainedTranscriptCount, 0)
+        store.retryFailures()
+        let retry = try XCTUnwrap(store.request)
+        XCTAssertEqual(retry.chunks.joined(), retry.sessionID == first.id ? first.text : second.text)
+    }
+
+    func testMissingSavedOriginalRemainsRetryableAfterFileIsRestored() throws {
+        let (store, root) = makeStore()
+        defer { removeTestRoot(root) }
+        let snapshot = makeSnapshot(language: .english, text: "Recover this original 🙂\n")
+        store.enqueue(snapshot)
+        let request = try XCTUnwrap(store.request)
+        let url = try XCTUnwrap(store.lastOriginalURL)
+        let savedData = try Data(contentsOf: url)
+        store.fail(request.id, message: "unavailable")
+        try FileManager.default.removeItem(at: url)
+
+        store.retryFailures()
+        XCTAssertNil(store.request)
+        XCTAssertEqual(store.failureCount, 1)
+        XCTAssertTrue(store.hasUnfinishedExports)
+        XCTAssertEqual(store.retainedTranscriptCount, 0)
+
+        try savedData.write(to: url)
+        store.retryFailures()
+        XCTAssertEqual(store.request?.chunks.joined(), snapshot.text)
+        XCTAssertEqual(store.failureCount, 0)
+    }
+
+    func testEditedSavedOriginalFailsUntilExactOriginalIsRestored() throws {
+        let (store, root) = makeStore()
+        defer { removeTestRoot(root) }
+        let snapshot = makeSnapshot(language: .english, text: "Original text 🙂\r")
+        store.enqueue(snapshot)
+        let request = try XCTUnwrap(store.request)
+        let url = try XCTUnwrap(store.lastOriginalURL)
+        let originalData = try Data(contentsOf: url)
+        store.fail(request.id, message: "unavailable")
+        try Data("Edited valid UTF-8 text 🙂\n".utf8).write(to: url)
+
+        store.retryFailures()
+        XCTAssertNil(store.request)
+        XCTAssertEqual(store.failureCount, 1)
+        XCTAssertTrue(store.hasUnfinishedExports)
+        XCTAssertEqual(store.retainedTranscriptCount, 0)
+
+        try originalData.write(to: url)
+        store.retryFailures()
+        let retry = try XCTUnwrap(store.request)
+        XCTAssertEqual(retry.chunks.joined(), snapshot.text)
+        XCTAssertEqual(store.failureCount, 0)
+        store.complete(retry.id, translations: ["恢复后的翻译"])
+        XCTAssertFalse(store.hasUnfinishedExports)
+    }
+
+    func testCompletedDedupIsBoundedWhileUnfinishedJobsStayDeduplicated() throws {
+        let root = testRoot()
+        defer { removeTestRoot(root) }
+        let store = SessionArchiveStore(writer: SessionArchiveWriter(rootDirectory: root), completedSessionLimit: 2)
+        let unfinished = makeSnapshot(language: .english, text: "Still unfinished")
+        store.enqueue(unfinished)
+        store.fail(try XCTUnwrap(store.request).id, message: "unavailable")
+
+        var latest: ListeningSessionSnapshot?
+        for index in 0..<5 {
+            let snapshot = makeSnapshot(language: .chinese, text: "完成 \(index)")
+            store.enqueue(snapshot)
+            store.fail(try XCTUnwrap(store.request).id, message: "optional title unavailable")
+            latest = snapshot
+            XCTAssertLessThanOrEqual(store.completedSessionCount, 2)
+        }
+        store.enqueue(try XCTUnwrap(latest))
+        store.enqueue(unfinished)
+        XCTAssertEqual(originalFiles(in: root).count, 6)
+        XCTAssertEqual(store.failureCount, 1)
+        XCTAssertNil(store.request)
+        store.retryFailures()
+        XCTAssertEqual(store.request?.sessionID, unfinished.id)
+    }
+
     func testEnglishSavesFullOriginalBeforeRequestingAllChineseChunks() throws {
         let (store, root) = makeStore()
         defer { removeTestRoot(root) }
@@ -158,6 +253,7 @@ final class SessionArchiveStoreTests: XCTestCase {
         XCTAssertNil(store.request)
         XCTAssertTrue(store.hasUnfinishedExports)
         XCTAssertNil(store.lastOriginalURL)
+        XCTAssertEqual(store.retainedTranscriptCount, 1)
 
         try FileManager.default.removeItem(at: root)
         store.retryFailures()
@@ -167,6 +263,7 @@ final class SessionArchiveStoreTests: XCTestCase {
         XCTAssertEqual(store.request?.sessionID, snapshot.id)
         XCTAssertEqual(store.failureCount, 0)
         XCTAssertEqual(store.request?.chunks.joined(), text)
+        XCTAssertEqual(store.retainedTranscriptCount, 0)
     }
 
     func testTwoQueuedSessionsSerializeRequestsWithoutMixingTheirFiles() throws {

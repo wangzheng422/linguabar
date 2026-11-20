@@ -85,6 +85,25 @@ private func stringProperty(
     return value as String
 }
 
+// Adapted from Sokuji's Core Audio output device diagnostics (3f0542afdba5).
+func defaultOutputDeviceDiagnostic() -> String? {
+    var address = globalAddress(kAudioHardwarePropertyDefaultOutputDevice)
+    var device = AudioObjectID(kAudioObjectUnknown)
+    var size = UInt32(MemoryLayout<AudioObjectID>.size)
+    guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &device) == noErr,
+          device != kAudioObjectUnknown,
+          let name = stringProperty(device, kAudioObjectPropertyName), !name.isEmpty else { return nil }
+
+    address = globalAddress(kAudioDevicePropertyTransportType)
+    var transport: UInt32 = 0
+    size = UInt32(MemoryLayout<UInt32>.size)
+    guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &transport) == noErr else { return name }
+    let bytes = [24, 16, 8, 0].map { UInt8(truncatingIfNeeded: transport >> $0) }
+    let code = bytes.allSatisfy { (0x20...0x7E).contains($0) }
+        ? String(decoding: bytes, as: UTF8.self) : String(transport)
+    return "\(name)（\(code)）"
+}
+
 private func parentProcessID(of processID: pid_t) -> pid_t {
     var info = kinfo_proc()
     var size = MemoryLayout<kinfo_proc>.stride
@@ -441,7 +460,8 @@ final class CoreAudioProcessTap: @unchecked Sendable {
            Date().timeIntervalSince(startedAt) > 3,
            renderingLongEnough {
             warnedAboutPermission = true
-            onWarning("检测到输出音频流，但采集持续静音（也可能尚未发声）。若确认有声音，请检查 LinguaBar 的系统音频录制权限。")
+            let output = defaultOutputDeviceDiagnostic().map { "当前默认输出：\($0)。" } ?? ""
+            onWarning("检测到输出音频流，但采集持续静音（也可能尚未发声）。\(output)若确认有声音，请检查 LinguaBar 的系统音频录制权限。")
         }
     }
 

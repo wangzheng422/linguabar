@@ -29,6 +29,7 @@ final class SubtitleStore: ObservableObject {
     @Published private(set) var status: SubtitleStatus = .idle
     @Published private(set) var englishText = "Waiting for meeting audio…"
     @Published private(set) var chineseText = "正在等待会议音频…"
+    @Published private(set) var translationError: String?
     @Published private(set) var translationInput = ""
     @Published private(set) var translationRevision = UUID()
     @Published var alwaysOnTop = true
@@ -65,6 +66,8 @@ final class SubtitleStore: ObservableObject {
     private var captureGeneration = UUID()
     private var isFinishingCapture = false
     private var translationDebounce: Task<Void, Never>?
+    private let englishTranslation = LiveTranslationChannel()
+    private let koreanTranslation = LiveTranslationChannel()
     private var finalizedTranscriptSegments: [TimedTranscript] = []
     private var currentTranscript: TimedTranscript?
     private var expirationTimer: AnyCancellable?
@@ -231,12 +234,26 @@ final class SubtitleStore: ObservableObject {
 
     func acceptTranslation(_ translation: String, for source: String, revision: UUID) {
         removeExpiredTranscripts()
-        guard revision == translationRevision, !source.isEmpty,
-              source == translationInput else { return }
+        guard revision == translationRevision, !source.isEmpty else { return }
+        translationError = nil
         chineseText = TranscriptFormatter.retainingLastLines(
             TranscriptFormatter.paragraphized(translation),
             maximum: maximumTranscriptLines
         )
+    }
+
+    func translationChannel(for language: SourceLanguage) -> LiveTranslationChannel {
+        precondition(language.needsChineseTranslation)
+        return language == .english ? englishTranslation : koreanTranslation
+    }
+
+    func isCurrentTranslation(_ request: LiveTranslationChannel.Request, language: SourceLanguage) -> Bool {
+        sourceLanguage == language && request.revision == translationRevision
+    }
+
+    func reportTranslationError(_ error: Error, for request: LiveTranslationChannel.Request, language: SourceLanguage) {
+        guard isCurrentTranslation(request, language: language) else { return }
+        translationError = "翻译暂不可用：\(error.localizedDescription)"
     }
 
     func acceptTranscript(_ text: String, isFinal: Bool, epoch: UInt64) {
@@ -266,17 +283,22 @@ final class SubtitleStore: ObservableObject {
         englishText = displayText
         if case .warning = status { status = .listening }
         let delay: UInt64 = isFinal ? 50_000_000 : 380_000_000
-        scheduleTranslation(displayText, delay: delay)
+        scheduleTranslation(delay: delay)
     }
 
-    private func scheduleTranslation(_ displayText: String, delay: UInt64) {
-        invalidateTranslation()
-        guard sourceLanguage.needsChineseTranslation, !displayText.isEmpty else { return }
+    private func scheduleTranslation(delay: UInt64) {
+        guard sourceLanguage.needsChineseTranslation, !englishText.isEmpty else { return }
+        // Keep the first deadline during a burst of partial speech results.
+        guard translationDebounce == nil else { return }
         translationDebounce = Task { [weak self] in
             try? await Task.sleep(nanoseconds: delay)
             guard !Task.isCancelled else { return }
-            self?.translationInput = displayText
-            self?.translationRevision = UUID()
+            guard let self else { return }
+            self.translationInput = self.englishText
+            self.translationChannel(for: self.sourceLanguage).send(.init(
+                text: self.translationInput, revision: self.translationRevision
+            ))
+            self.translationDebounce = nil
         }
     }
 
@@ -291,6 +313,9 @@ final class SubtitleStore: ObservableObject {
         translationDebounce = nil
         translationInput = ""
         translationRevision = UUID()
+        translationError = nil
+        englishTranslation.clear()
+        koreanTranslation.clear()
     }
 
     func clearTranscript() {
@@ -315,7 +340,8 @@ final class SubtitleStore: ObservableObject {
         // Translation is a snapshot of the whole retained source. Clear it immediately
         // rather than leave expired words visible while the replacement is translated.
         chineseText = ""
-        scheduleTranslation(englishText, delay: 0)
+        invalidateTranslation()
+        scheduleTranslation(delay: 0)
     }
 
     private func applyAutomaticSourceSelection(_ identifier: String) {
@@ -349,7 +375,8 @@ final class SubtitleStore: ObservableObject {
         let limitedDisplay = currentLimitedDisplayText()
         englishText = limitedDisplay
         chineseText = ""
-        scheduleTranslation(limitedDisplay, delay: 0)
+        invalidateTranslation()
+        scheduleTranslation(delay: 0)
     }
 
     deinit {
