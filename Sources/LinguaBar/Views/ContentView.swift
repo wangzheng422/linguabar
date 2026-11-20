@@ -35,10 +35,12 @@ struct ContentView: View {
         .padding(8)
         .background(WindowConfigurator(alwaysOnTop: store.alwaysOnTop))
         .background {
-            // Stable, independent language lanes avoid cancelling framework requests
-            // even on language changes. Each lane has one active and one latest item.
-            LiveTranslationTask(store: store, language: .english)
-            LiveTranslationTask(store: store, language: .korean)
+            // Reconnect once per listening session, never for individual subtitle updates.
+            Group {
+                LiveTranslationTask(store: store, language: .english)
+                LiveTranslationTask(store: store, language: .korean)
+            }
+            .id(store.liveTranslationSessionID)
         }
     }
 

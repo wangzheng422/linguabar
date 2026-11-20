@@ -1,4 +1,11 @@
-# LinguaBar 0.2.2
+# LinguaBar 0.2.3
+
+- 修复上一段的实时翻译任务断开后，下一段可能只有英文转写、没有中文译文的问题。每次开始监听都会重新连接翻译任务。
+- Fix missing Chinese captions in a subsequent listening session after the previous live translation task disconnects. LinguaBar reconnects live translation at each session start.
+
+[下载 / Downloads](https://github.com/wangzheng422/linguabar/releases/tag/v0.2.3)
+
+## LinguaBar 0.2.2
 
 macOS 15+ · Apple Silicon (`arm64`)
 

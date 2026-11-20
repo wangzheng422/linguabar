@@ -3,6 +3,32 @@ import XCTest
 
 @MainActor
 final class SessionCaptureIntegrationTests: XCTestCase {
+    func testNextListeningSessionReplacesTranslationWorkerAndRejectsPreviousOutput() async throws {
+        let suite = "SessionTranslationTests.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = SubtitleStore(defaults: defaults, sourceProvider: { [.system] }, automaticallyPrune: false)
+        store.beginListeningSession()
+        let firstWorker = store.liveTranslationSessionID
+        store.clearTranscript()
+        XCTAssertEqual(store.liveTranslationSessionID, firstWorker)
+        let firstRevision = store.translationRevision
+        store.stopCapture()
+        for _ in 0..<100 where store.status != .idle { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(store.status, .idle)
+        store.beginListeningSession()
+        XCTAssertNotEqual(store.liveTranslationSessionID, firstWorker)
+        let previousText = store.chineseText
+        store.acceptTranslation("上一场的译文", for: "Previous session", revision: firstRevision)
+        XCTAssertEqual(store.chineseText, previousText)
+        store.acceptTranscript("Second session", isFinal: true, epoch: store.recognitionEpoch)
+        for _ in 0..<100 where store.translationInput.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        let request = try XCTUnwrap(store.translationChannel(for: .english).takeLatest())
+        XCTAssertEqual(request.text, "Second session")
+        store.acceptTranslation("第二段", for: request.text, revision: request.revision)
+        XCTAssertEqual(store.chineseText, "第二段")
+    }
+
     func testFinalCorrectionArrivingDuringStopIsIncluded() async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let suite = "SessionStopTests.\(UUID())"

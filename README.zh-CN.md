@@ -53,9 +53,9 @@ LinguaBar 将每次非空的开始到停止记录为一场，并自动保存 UTF
 
 ## 开始使用
 
-**需要 macOS 15 或更新版本。** 当前 v0.2.2 安装包面向 Apple Silicon（`arm64`），尚未包含或验证 Intel 版本。
+**需要 macOS 15 或更新版本。** 当前 v0.2.3 安装包面向 Apple Silicon（`arm64`），尚未包含或验证 Intel 版本。
 
-1. 下载 [LinguaBar-0.2.2-macos-arm64.dmg](https://github.com/wangzheng422/linguabar/releases/download/v0.2.2/LinguaBar-0.2.2-macos-arm64.dmg)，将 **LinguaBar** 拖入 **Applications**。
+1. 下载 [LinguaBar-0.2.3-macos-arm64.dmg](https://github.com/wangzheng422/linguabar/releases/download/v0.2.3/LinguaBar-0.2.3-macos-arm64.dmg)，将 **LinguaBar** 拖入 **Applications**。
 2. 启动应用，打开会议，选择音频来源。
 3. 选择 English、한국어 或中文，然后点击 **开始字幕**。
 4. 按 macOS 提示允许语音识别、系统音频录制；首次翻译可能需要下载语言包。

@@ -32,6 +32,7 @@ final class SubtitleStore: ObservableObject {
     @Published private(set) var translationError: String?
     @Published private(set) var translationInput = ""
     @Published private(set) var translationRevision = UUID()
+    @Published private(set) var liveTranslationSessionID = UUID()
     @Published var alwaysOnTop = true
     @Published var sourceLanguage: SourceLanguage {
         didSet {
@@ -150,7 +151,6 @@ final class SubtitleStore: ObservableObject {
         guard captureGeneration == generation else { return }
 
         do {
-            resetTranscriptHistory()
             let session = beginListeningSession()
             recognitionEpoch = try transcriber.start(
                 localeIdentifier: sourceLanguage.speechLocaleIdentifier,
@@ -227,6 +227,8 @@ final class SubtitleStore: ObservableObject {
 
     @discardableResult
     func beginListeningSession() -> ListeningSession {
+        resetTranscriptHistory()
+        liveTranslationSessionID = UUID()
         let session = ListeningSession(startedAt: now(), language: sourceLanguage)
         listeningSession = session
         return session
