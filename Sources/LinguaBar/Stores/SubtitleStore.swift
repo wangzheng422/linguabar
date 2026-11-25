@@ -33,6 +33,7 @@ final class SubtitleStore: ObservableObject {
     @Published private(set) var translationInput = ""
     @Published private(set) var translationRevision = UUID()
     @Published private(set) var liveTranslationSessionID = UUID()
+    var liveTranslationPacing = LiveTranslationPacing()
     @Published var alwaysOnTop = true
     @Published var sourceLanguage: SourceLanguage {
         didSet {
@@ -199,8 +200,8 @@ final class SubtitleStore: ObservableObject {
 
     func stopCapture() {
         guard !isFinishingCapture else { return }
-        translationDebounce?.cancel()
-        translationDebounce = nil
+        // End queued live retries before starting the full-session archive.
+        invalidateTranslation()
         audioTap.stop()
         guard listeningSession != nil else {
             transcriber.stop()
@@ -253,9 +254,11 @@ final class SubtitleStore: ObservableObject {
         sourceLanguage == language && request.revision == translationRevision
     }
 
-    func reportTranslationError(_ error: Error, for request: LiveTranslationChannel.Request, language: SourceLanguage) {
+    func reportTranslationError(_ error: Error, for request: LiveTranslationChannel.Request,
+                                language: SourceLanguage, retryAfter: Int? = nil) {
         guard isCurrentTranslation(request, language: language) else { return }
-        translationError = "翻译暂不可用：\(error.localizedDescription)"
+        translationError = retryAfter.map { "翻译暂缓，\($0) 秒后自动重试" }
+            ?? "翻译暂不可用：\(error.localizedDescription)"
     }
 
     func acceptTranscript(_ text: String, isFinal: Bool, epoch: UInt64) {

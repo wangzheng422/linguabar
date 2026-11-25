@@ -1,4 +1,11 @@
-# LinguaBar 0.2.3
+# LinguaBar 0.2.4
+
+- 实时翻译复用已有译文，只提交新增或改动的字幕行。翻译请求分批发送，引擎暂时拒绝请求时会自动退避并重试最新字幕。
+- Live translation reuses previous results and submits new or changed lines in paced batches. After a transient engine error, it backs off and retries the latest captions.
+
+[下载 / Downloads](https://github.com/wangzheng422/linguabar/releases/tag/v0.2.4)
+
+## LinguaBar 0.2.3
 
 - 修复上一段的实时翻译任务断开后，下一段可能只有英文转写、没有中文译文的问题。每次开始监听都会重新连接翻译任务。
 - Fix missing Chinese captions in a subsequent listening session after the previous live translation task disconnects. LinguaBar reconnects live translation at each session start.

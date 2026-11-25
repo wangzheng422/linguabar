@@ -53,9 +53,9 @@ Filenames combine the session's local start time with a sanitized English keywor
 
 ## Get started
 
-**Requires macOS 15 or later.** The v0.2.3 binary targets Apple Silicon (`arm64`); Intel is not included or validated.
+**Requires macOS 15 or later.** The v0.2.4 binary targets Apple Silicon (`arm64`); Intel is not included or validated.
 
-1. Download [LinguaBar-0.2.3-macos-arm64.dmg](https://github.com/wangzheng422/linguabar/releases/download/v0.2.3/LinguaBar-0.2.3-macos-arm64.dmg) and drag **LinguaBar** into **Applications**.
+1. Download [LinguaBar-0.2.4-macos-arm64.zip](https://github.com/wangzheng422/linguabar/releases/download/v0.2.4/LinguaBar-0.2.4-macos-arm64.zip), extract it, and drag **LinguaBar** into **Applications**.
 2. Launch the app, open your meeting, and choose its audio source.
 3. Select English, Korean, or Chinese, then click **开始字幕** (Start captions).
 4. Allow Speech Recognition and system audio recording when macOS requests them. Apple Translation may request a language download.
